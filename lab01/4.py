@@ -1,0 +1,6 @@
+x = input()
+y = input()
+xyy = int(x) // int(y)
+xy = int(x) / int(y)
+print(xyy)
+print(xy)
