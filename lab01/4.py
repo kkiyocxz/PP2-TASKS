@@ -1,6 +1,4 @@
-x = input()
-y = input()
-xyy = int(x) // int(y)
-xy = int(x) / int(y)
-print(xyy)
+x = int(input())
+y = int(input())
+xy = x + y
 print(xy)
