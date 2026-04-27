@@ -1,217 +1,219 @@
+# Импортируем Pygame и файлы проекта.
 import pygame
-import sys
-import os
+from racer import WIDTH, HEIGHT, FPS, RacerGame
+from ui import Button, draw_text, username_screen, WHITE, DARK, YELLOW, GREEN, RED
 from persistence import load_settings, save_settings, load_leaderboard, save_score
-from ui import Button, TextInput
-from racer import Player, Enemy, Obstacle, PowerUp
 
-# --- AUTO-FIX PATHING ---
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-# --- Initialization ---
+# Запускаем Pygame.
 pygame.init()
-pygame.mixer.init()
-WIDTH, HEIGHT = 600, 600
+
+# Создаем окно игры.
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("TSIS 3: Racer")
+pygame.display.set_caption("TSIS3 Racer")
 clock = pygame.time.Clock()
-font = pygame.font.Font(None, 36)
+font = pygame.font.SysFont("Verdana", 20)
+small_font = pygame.font.SysFont("Verdana", 16)
 
-# --- Load Settings Early ---
+# Загружаем настройки из JSON-файла.
 settings = load_settings()
+username = "Player"
+last_result = None
 
-# --- Asset Loading ---
-def load_sound(name):
-    path = os.path.join('assets', 'sounds', name)
-    try:
-        return pygame.mixer.Sound(path)
-    except (FileNotFoundError, pygame.error) as e:
-        print(f"Warning: Could not load {name}. Error: {e}")
-        return None
 
-snd_crash = load_sound('crash.wav')
-snd_powerup = load_sound('powerup.wav')
-music_loaded = False
-try:
-    pygame.mixer.music.load(os.path.join('assets', 'sounds', 'bg_music.mp3'))
-    music_loaded = True
-except:
-    print("Warning: bg_music.mp3 not found.")
+# Главное меню игры.
+def main_menu():
+    global username
 
-# --- Global Variables & Groups ---
-state = "MENU" # Set to "PLAY" to skip menu for testing
-player_name = "Player"
-score = 0
-distance = 0
+    # Кнопки главного меню.
+    buttons = [
+        Button(100, 190, 200, 45, "Play", font),
+        Button(100, 250, 200, 45, "Leaderboard", font),
+        Button(100, 310, 200, 45, "Settings", font),
+        Button(100, 370, 200, 45, "Quit", font)
+    ]
 
-all_sprites = pygame.sprite.Group()
-enemies = pygame.sprite.Group()
-obstacles = pygame.sprite.Group()
-powerups = pygame.sprite.Group()
-player = None
+    while True:
+        clock.tick(FPS)
 
-# --- Function Definitions (Must be BEFORE they are called) ---
-def reset_game():
-    global player, score, distance, all_sprites, enemies, obstacles, powerups
-    all_sprites.empty()
-    enemies.empty()
-    obstacles.empty()
-    powerups.empty()
-    player = Player(settings["car_color"])
-    all_sprites.add(player)
-    score = 0
-    distance = 0
-    if music_loaded and settings["sound"]:
-        pygame.mixer.music.play(-1)
+        # Проверяем действия игрока.
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
 
-def draw_hud():
-    screen.blit(font.render(f"Score: {int(score)}", True, (255,255,255)), (10, 10))
-    screen.blit(font.render(f"Dist: {int(distance)}m", True, (255,255,255)), (10, 40))
-    if player and player.nitro_active:
-        time_left = (player.powerup_timer - pygame.time.get_ticks()) // 1000
-        screen.blit(font.render(f"NITRO: {max(0, time_left)}s", True, (0, 255, 255)), (10, 80))
-    if player and player.shield_active:
-        screen.blit(font.render("SHIELD ACTIVE", True, (255, 215, 0)), (10, 80))
+            if buttons[0].clicked(event):
+                username = username_screen(screen, clock, WIDTH, HEIGHT)
+                return "play"
+            if buttons[1].clicked(event):
+                return "leaderboard"
+            if buttons[2].clicked(event):
+                return "settings"
+            if buttons[3].clicked(event):
+                pygame.quit()
+                raise SystemExit
 
-# --- UI Setup ---
-btn_play = Button(200, 150, 200, 50, "Play")
-btn_board = Button(200, 220, 200, 50, "Leaderboard")
-btn_settings = Button(200, 290, 200, 50, "Settings")
-btn_quit = Button(200, 360, 200, 50, "Quit")
-btn_back = Button(200, 500, 200, 50, "Back")
-btn_retry = Button(200, 350, 200, 50, "Retry")
-btn_menu = Button(200, 420, 200, 50, "Main Menu")
-name_input = TextInput(200, 250, 200, 40)
+        # Рисуем фон и заголовок меню.
+        screen.fill(DARK)
+        draw_text(screen, "TSIS3 RACER", 36, WHITE, WIDTH // 2, 100)
+        draw_text(screen, "Advanced Driving Game", 17, YELLOW, WIDTH // 2, 140)
 
-# --- Spawn Events ---
-SPAWN_ENEMY = pygame.USEREVENT + 1
-SPAWN_OBSTACLE = pygame.USEREVENT + 2
-SPAWN_POWERUP = pygame.USEREVENT + 3
-pygame.time.set_timer(SPAWN_ENEMY, 1500)
-pygame.time.set_timer(SPAWN_OBSTACLE, 2500)
-pygame.time.set_timer(SPAWN_POWERUP, 6000)
+        for button in buttons:
+            button.draw(screen)
 
-# Initial call if you want to skip the menu
-if state == "PLAY":
-    reset_game()
+        pygame.display.flip()
 
-# --- Main Loop ---
-running = True
-while running:
-    screen.fill((50, 150, 50)) 
-    pygame.draw.rect(screen, (40, 40, 40), (150, 0, 300, 600)) 
-    
-    # Scrolling road lines
-    for y in range(0, 600, 40):
-        pygame.draw.rect(screen, (255, 255, 255), (245, (y + int(distance * 10)) % 600, 10, 20))
-        pygame.draw.rect(screen, (255, 255, 255), (345, (y + int(distance * 10)) % 600, 10, 20))
 
-    events = pygame.event.get()
-    for event in events:
-        if event.type == pygame.QUIT:
-            running = False
-        
-        if state == "MENU":
-            if btn_play.is_clicked(event): state = "NAME_INPUT"
-            if btn_board.is_clicked(event): state = "LEADERBOARD"
-            if btn_settings.is_clicked(event): state = "SETTINGS"
-            if btn_quit.is_clicked(event): running = False
-        
-        elif state == "NAME_INPUT":
-            name_input.handle_event(event)
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                player_name = name_input.text if name_input.text else "Player"
-                reset_game()
-                state = "PLAY"
+# Экран таблицы рекордов.
+def leaderboard_screen():
+    back = Button(110, 530, 180, 42, "Back", font)
 
-        elif state == "PLAY":
-            speed_boost = score // 500
-            
-            if event.type == SPAWN_ENEMY:
-                e = Enemy(settings["difficulty"])
-                e.speed += speed_boost
-                if not pygame.sprite.spritecollideany(e, enemies) and not pygame.sprite.spritecollideany(e, obstacles):
-                    all_sprites.add(e)
-                    enemies.add(e)
-            
-            if event.type == SPAWN_OBSTACLE:
-                o = Obstacle()
-                if not pygame.sprite.spritecollideany(o, enemies) and not pygame.sprite.spritecollideany(o, obstacles):
-                    all_sprites.add(o)
-                    obstacles.add(o)
-            
-            if event.type == SPAWN_POWERUP:
-                p = PowerUp()
-                if not pygame.sprite.spritecollideany(p, enemies) and not pygame.sprite.spritecollideany(p, obstacles):
-                    all_sprites.add(p)
-                    powerups.add(p)
+    while True:
+        clock.tick(FPS)
 
-        elif state in ["LEADERBOARD", "SETTINGS"]:
-            if btn_back.is_clicked(event): state = "MENU"
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
+            if back.clicked(event):
+                return "menu"
 
-        elif state == "GAMEOVER":
-            if btn_retry.is_clicked(event):
-                reset_game()
-                state = "PLAY"
-            if btn_menu.is_clicked(event): state = "MENU"
+        screen.fill(DARK)
+        draw_text(screen, "Leaderboard Top 10", 28, WHITE, WIDTH // 2, 60)
 
-    # --- Render State ---
-    if state == "MENU":
-        btn_play.draw(screen)
-        btn_board.draw(screen)
-        btn_settings.draw(screen)
-        btn_quit.draw(screen)
-    elif state == "NAME_INPUT":
-        screen.blit(font.render("Enter Name & Press Enter:", True, (255,255,255)), (150, 200))
-        name_input.draw(screen)
-    elif state == "PLAY":
-        all_sprites.update()
-        speed_boost = score // 500
-        distance += (0.1 + (speed_boost * 0.02))
-        score += 0.2 if not player.nitro_active else 0.5
-        
-        # Collisions
-        if not player.shield_active:
-            if pygame.sprite.spritecollideany(player, enemies) or pygame.sprite.spritecollideany(player, obstacles):
-                if settings["sound"] and snd_crash: snd_crash.play()
-                if player.crashes_allowed > 0:
-                    player.crashes_allowed -= 1
-                    player.shield_active = True
-                    player.powerup_timer = pygame.time.get_ticks() + 2000
-                else:
-                    pygame.mixer.music.stop()
-                    save_score(player_name, int(score), int(distance))
-                    state = "GAMEOVER"
-        
-        # Powerups
-        hits = pygame.sprite.spritecollide(player, powerups, True)
-        for hit in hits:
-            if settings["sound"] and snd_powerup: snd_powerup.play()
-            if hit.type == "Nitro":
-                player.nitro_active, player.shield_active = True, False
-                player.powerup_timer = pygame.time.get_ticks() + 4000
-            elif hit.type == "Shield":
-                player.shield_active, player.nitro_active = True, False
-                player.powerup_timer = pygame.time.get_ticks() + 4000
-            elif hit.type == "Repair": player.crashes_allowed = 1
-        
-        all_sprites.draw(screen)
-        draw_hud()
-    elif state == "LEADERBOARD":
-        screen.fill((30, 30, 30))
-        board = load_leaderboard()
-        for i, entry in enumerate(board):
-            txt = f"{i+1}. {entry['name']} - {entry['score']} pts"
-            screen.blit(font.render(txt, True, (255,255,255)), (150, 50 + i*35))
-        btn_back.draw(screen)
-    elif state == "GAMEOVER":
-        screen.fill((0, 0, 0))
-        screen.blit(font.render(f"GAME OVER! Score: {int(score)}", True, (255, 0, 0)), (180, 200))
-        btn_retry.draw(screen)
-        btn_menu.draw(screen)
+        # Загружаем топ игроков из leaderboard.json.
+        data = load_leaderboard()
+        if not data:
+            draw_text(screen, "No scores yet", 20, YELLOW, WIDTH // 2, 180)
+        else:
+            y = 115
+            draw_text(screen, "Rank   Name       Score    Distance", 14, YELLOW, 35, 90, center=False)
+            for i, row in enumerate(data, start=1):
+                text = f"{i:<5} {row['name'][:8]:<9} {row['score']:<7} {row['distance']}m"
+                surface = small_font.render(text, True, WHITE)
+                screen.blit(surface, (35, y))
+                y += 34
 
-    pygame.display.flip()
-    clock.tick(60)
+        back.draw(screen)
+        pygame.display.flip()
 
-pygame.quit()
-sys.exit()
+
+# Экран настроек.
+def settings_screen():
+    global settings
+
+    sound = Button(70, 160, 260, 42, "", font)
+    color = Button(70, 230, 260, 42, "", font)
+    difficulty = Button(70, 300, 260, 42, "", font)
+    back = Button(110, 430, 180, 42, "Back", font)
+
+    # Возможные цвета машины.
+    colors = ["blue", "red", "green"]
+    # Возможные уровни сложности.
+    difficulties = ["easy", "normal", "hard"]
+
+    while True:
+        clock.tick(FPS)
+
+        # Обновляем текст кнопок по текущим настройкам.
+        sound.text = f"Sound: {'ON' if settings['sound'] else 'OFF'}"
+        color.text = f"Car color: {settings['car_color']}"
+        difficulty.text = f"Difficulty: {settings['difficulty']}"
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
+
+            # При клике меняем настройку и сохраняем ее.
+            if sound.clicked(event):
+                settings["sound"] = not settings["sound"]
+                save_settings(settings)
+
+            if color.clicked(event):
+                index = colors.index(settings["car_color"])
+                settings["car_color"] = colors[(index + 1) % len(colors)]
+                save_settings(settings)
+
+            if difficulty.clicked(event):
+                index = difficulties.index(settings["difficulty"])
+                settings["difficulty"] = difficulties[(index + 1) % len(difficulties)]
+                save_settings(settings)
+
+            if back.clicked(event):
+                return "menu"
+
+        screen.fill(DARK)
+        draw_text(screen, "Settings", 32, WHITE, WIDTH // 2, 80)
+        sound.draw(screen)
+        color.draw(screen)
+        difficulty.draw(screen)
+        back.draw(screen)
+        pygame.display.flip()
+
+
+# Экран после победы или проигрыша.
+def game_over_screen(result, finished=False):
+    retry = Button(95, 365, 210, 42, "Retry", font)
+    menu = Button(95, 425, 210, 42, "Main Menu", font)
+
+    title = "FINISHED!" if finished else "GAME OVER"
+    color = GREEN if finished else RED
+
+    while True:
+        clock.tick(FPS)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
+            if retry.clicked(event):
+                return "play"
+            if menu.clicked(event):
+                return "menu"
+
+        screen.fill(DARK)
+        draw_text(screen, title, 36, color, WIDTH // 2, 105)
+        draw_text(screen, f"Player: {username}", 20, WHITE, WIDTH // 2, 175)
+        draw_text(screen, f"Score: {result['score']}", 20, WHITE, WIDTH // 2, 215)
+        draw_text(screen, f"Distance: {result['distance']}m", 20, WHITE, WIDTH // 2, 250)
+        draw_text(screen, f"Coins: {result['coins']}", 20, WHITE, WIDTH // 2, 285)
+        retry.draw(screen)
+        menu.draw(screen)
+        pygame.display.flip()
+
+
+# Запускает гонку и сохраняет результат.
+def play_game():
+    game = RacerGame(screen, clock, username, settings)
+    status = game.run()
+
+    # Данные для финального экрана.
+    result = {
+        "score": game.score,
+        "distance": int(game.distance),
+        "coins": game.coins
+    }
+
+    # Сохраняем результат в leaderboard.json.
+    save_score(username, game.score, game.distance, game.coins)
+
+    return game_over_screen(result, finished=(status == "finished"))
+
+
+# Главный цикл переключает экраны.
+def main():
+    state = "menu"
+
+    while True:
+        if state == "menu":
+            state = main_menu()
+        elif state == "play":
+            state = play_game()
+        elif state == "leaderboard":
+            state = leaderboard_screen()
+        elif state == "settings":
+            state = settings_screen()
+
+
+if __name__ == "__main__":
+    main()

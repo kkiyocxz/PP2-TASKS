@@ -1,8 +1,3 @@
--- ============================================================
--- schema.sql  –  PhoneBook extended schema (TSIS 1)
--- Run once to set up (or upgrade) the database.
--- ============================================================
-
 -- 1. Groups / categories ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS groups (
     id   SERIAL PRIMARY KEY,

@@ -1,30 +1,79 @@
+# Этот файл работает с JSON-сохранением.
 import json
 import os
 
-SETTINGS_FILE = 'settings.json'
-LEADERBOARD_FILE = 'leaderboard.json'
+# Папка, где лежит проект.
+BASE_DIR = os.path.dirname(__file__)
+SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+LEADERBOARD_FILE = os.path.join(BASE_DIR, "leaderboard.json")
 
+# Настройки по умолчанию.
+DEFAULT_SETTINGS = {
+    "sound": True,
+    "car_color": "blue",
+    "difficulty": "normal"
+}
+
+
+# Загружает JSON или создает файл, если его нет.
+def load_json(path, default_data):
+    # Если файла нет, создаем его.
+    if not os.path.exists(path):
+        save_json(path, default_data)
+        return default_data.copy()
+
+    # Пробуем прочитать файл.
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    # Если файл сломан, возвращаем стандартные данные.
+    except Exception:
+        save_json(path, default_data)
+        return default_data.copy()
+
+
+# Сохраняет данные в JSON.
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+
+
+# Загружает настройки игры.
 def load_settings():
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, 'r') as f:
-            return json.load(f)
-    default = {"sound": True, "car_color": "red", "difficulty": "normal"}
-    save_settings(default)
-    return default
+    settings = load_json(SETTINGS_FILE, DEFAULT_SETTINGS)
 
+    # Добавляем недостающие настройки.
+    for key, value in DEFAULT_SETTINGS.items():
+        if key not in settings:
+            settings[key] = value
+
+    return settings
+
+
+# Сохраняет настройки игры.
 def save_settings(settings):
-    with open(SETTINGS_FILE, 'w') as f:
-        json.dump(settings, f, indent=4)
+    save_json(SETTINGS_FILE, settings)
 
+
+# Загружает таблицу рекордов.
 def load_leaderboard():
-    if os.path.exists(LEADERBOARD_FILE):
-        with open(LEADERBOARD_FILE, 'r') as f:
-            return json.load(f)
-    return []
+    return load_json(LEADERBOARD_FILE, [])
 
-def save_score(name, score, distance):
-    board = load_leaderboard()
-    board.append({"name": name, "score": score, "distance": distance})
-    board = sorted(board, key=lambda x: x['score'], reverse=True)[:10]
-    with open(LEADERBOARD_FILE, 'w') as f:
-        json.dump(board, f, indent=4)
+
+# Добавляет новый результат игрока.
+def save_score(username, score, distance, coins):
+    leaderboard = load_leaderboard()
+
+    leaderboard.append({
+        "name": username,
+        "score": int(score),
+        "distance": int(distance),
+        "coins": int(coins)
+    })
+
+    # Сортируем игроков по score.
+    leaderboard.sort(key=lambda item: item["score"], reverse=True)
+    # Оставляем только топ-10.
+    leaderboard = leaderboard[:10]
+
+    save_json(LEADERBOARD_FILE, leaderboard)

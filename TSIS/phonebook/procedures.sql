@@ -1,8 +1,3 @@
--- ============================================================
--- procedures.sql  –  New PL/pgSQL objects for TSIS 1
--- (Procedures from Practice 8 are NOT repeated here.)
--- ============================================================
-
 -- 1. add_phone ────────────────────────────────────────────────
 --    Adds a phone number to an existing contact looked up by name.
 CREATE OR REPLACE PROCEDURE add_phone(
