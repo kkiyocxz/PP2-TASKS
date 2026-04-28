@@ -1,120 +1,167 @@
 import pygame as p
 import math
-import os
 from datetime import datetime
 
 p.init()
 
-# --- Screen & Icons ---
-# Ensure "images/icon_paint.png" exists or update the path
 try:
     icon = p.image.load("images/icon_paint.png")
     p.display.set_icon(icon)
 except:
-    print("Icon not found, using default.")
+    pass
 
-WIDTH, HEIGHT = 1000, 850
+WIDTH, HEIGHT = 1000, 750
 p.display.set_caption("Paint")
 screen = p.display.set_mode((WIDTH, HEIGHT))
 clock = p.time.Clock()
-font = p.font.SysFont("Arial", 12, bold=True)
+font = p.font.SysFont("Arial", 11, bold=True)
 large_font = p.font.SysFont("Arial", 18, bold=True)
 
 # --- Canvas ---
-canvas_offset = (100, 150)
-canvas = p.Surface((800, 600))
+canvas_offset = (10, 110)
+canvas = p.Surface((980, 630))
 canvas.fill((255, 255, 255))
 
-# --- State Variables ---
+# --- State ---
 color = (0, 0, 0)
 brush_size = 3
 tool = "draw"
 drawing = False
-start_pos = None 
+start_pos = None
 text_input = ""
 text_pos = None
 last_draw_pos = None
 
-# --- UI Definitions ---
-btns = {
-    # Colors
-    "black":   {"rect": p.Rect(10, 10, 40, 40), "color": (0,0,0)},
-    "red":     {"rect": p.Rect(60, 10, 40, 40), "color": (255,0,0)},
-    "green":   {"rect": p.Rect(110, 10, 40, 40), "color": (0,255,0)},
-    "blue":    {"rect": p.Rect(160, 10, 40, 40), "color": (0,0,255)},
-    "purple":  {"rect": p.Rect(210, 10, 40, 40), "color": (128,0,128)},
-    "orange":  {"rect": p.Rect(260, 10, 40, 40), "color": (255,165,0)},
-    "cyan":    {"rect": p.Rect(310, 10, 40, 40), "color": (0,255,255)},
-    "eraser":  {"rect": p.Rect(370, 10, 60, 40), "color": (255,255,255), "label": "eraser"},
-    
-    # Shapes & Tools (Row 2)
-    "draw":    {"rect": p.Rect(10, 60, 70, 40), "label": "pencil"},
-    "line":    {"rect": p.Rect(90, 60, 70, 40), "label": "line"},
-    "square":  {"rect": p.Rect(170, 60, 70, 40), "label": "rectangle"},
-    "circle":  {"rect": p.Rect(250, 60, 70, 40), "label": "circle"},
-    "rect_tri": {"rect": p.Rect(330, 60, 70, 40), "label": "r-tri"},
-    "eq_tri":  {"rect": p.Rect(410, 60, 70, 40), "label": "e-tri"},
-    "rhombus": {"rect": p.Rect(490, 60, 70, 40), "label": "rhombus"},
-    "fill":    {"rect": p.Rect(570, 60, 70, 40), "label": "fill"},
-    "text":    {"rect": p.Rect(650, 60, 70, 40), "label": "text"},
-    
-    # Brush Controls
-    "minus":   {"rect": p.Rect(740, 60, 40, 40), "label": "-"},
-    "plus":    {"rect": p.Rect(790, 60, 40, 40), "label": "+"},
-    "clear":   {"rect": p.Rect(910, 10, 70, 40), "label": "clear"}
-}
+# --- Цвета палитры ---
+COLORS = [
+    ("black",  (0, 0, 0)),
+    ("white",  (255, 255, 255)),
+    ("red",    (220, 30, 30)),
+    ("orange", (255, 140, 0)),
+    ("yellow", (255, 220, 0)),
+    ("green",  (30, 180, 30)),
+    ("cyan",   (0, 210, 210)),
+    ("blue",   (30, 80, 220)),
+    ("purple", (140, 0, 200)),
+    ("pink",   (255, 100, 180)),
+    ("brown",  (140, 70, 20)),
+    ("gray",   (150, 150, 150)),
+]
+
+# --- Строим btns ---
+btns = {}
+
+# Строка 1 (y=10): цвета + eraser + clear
+x = 10
+for name, clr in COLORS:
+    btns[name] = {"rect": p.Rect(x, 10, 38, 38), "color": clr}
+    x += 42
+
+btns["eraser"] = {"rect": p.Rect(x, 10, 60, 38), "color": (255, 255, 255), "label": "eraser"}
+x += 65
+btns["clear"] = {"rect": p.Rect(x, 10, 55, 38), "label": "clear"}
+
+# Строка 2 (y=58): инструменты + размер кисти
+tool_items = [
+    ("draw",     "pencil"),
+    ("line",     "line"),
+    ("square",   "rect"),
+    ("circle",   "circle"),
+    ("rect_tri", "r-tri"),
+    ("eq_tri",   "e-tri"),
+    ("rhombus",  "rhombus"),
+    ("fill",     "fill"),
+    ("text",     "text"),
+]
+x = 10
+for tname, tlabel in tool_items:
+    btns[tname] = {"rect": p.Rect(x, 58, 72, 38), "label": tlabel}
+    x += 76
+
+btns["minus"] = {"rect": p.Rect(x, 58, 38, 38), "label": "-"}
+x += 42
+btns["plus"]  = {"rect": p.Rect(x, 58, 38, 38), "label": "+"}
+
 
 def flood_fill(surf, x, y, new_col):
-    """Efficient stack-based flood fill."""
     target_col = surf.get_at((x, y))
-    if target_col == new_col: return
+    if target_col[:3] == new_col[:3]:
+        return
     stack = [(x, y)]
+    w, h = surf.get_size()
     while stack:
-        cur_x, cur_y = stack.pop()
-        if 0 <= cur_x < 800 and 0 <= cur_y < 600:
-            if surf.get_at((cur_x, cur_y)) == target_col:
-                surf.set_at((cur_x, cur_y), new_col)
-                stack.append((cur_x + 1, cur_y))
-                stack.append((cur_x - 1, cur_y))
-                stack.append((cur_x, cur_y + 1))
-                stack.append((cur_x, cur_y - 1))
+        cx, cy = stack.pop()
+        if 0 <= cx < w and 0 <= cy < h:
+            if surf.get_at((cx, cy))[:3] == target_col[:3]:
+                surf.set_at((cx, cy), new_col)
+                stack.extend([(cx+1,cy),(cx-1,cy),(cx,cy+1),(cx,cy-1)])
+
 
 def get_shape_points(shape_type, start, end):
     x1, y1 = start
     x2, y2 = end
     w, h = x2 - x1, y2 - y1
-    if shape_type == "rect_tri": return [(x1, y1), (x1, y2), (x2, y2)]
+    if shape_type == "rect_tri":
+        return [(x1, y1), (x1, y2), (x2, y2)]
     elif shape_type == "eq_tri":
         side = x2 - x1
-        h_tri = (math.sqrt(3) / 2) * side
+        h_tri = (math.sqrt(3) / 2) * abs(side)
         return [(x1 + side/2, y1), (x1, y1 + h_tri), (x1 + side, y1 + h_tri)]
-    elif shape_type == "rhombus": 
+    elif shape_type == "rhombus":
         return [(x1 + w/2, y1), (x2, y1 + h/2), (x1 + w/2, y2), (x1, y1 + h/2)]
     return []
 
-# --- Main Loop ---
+
+def draw_button(surf, name, info, active_tool, active_color):
+    rect = info["rect"]
+    is_color_btn = "color" in info and "label" not in info
+    is_eraser = name == "eraser"
+
+    # Фон кнопки
+    if is_color_btn:
+        bg = info["color"]
+    elif name == active_tool or (is_eraser and active_tool == "draw" and active_color == (255,255,255)):
+        bg = (255, 230, 0)  # активный инструмент — жёлтый
+    else:
+        bg = (220, 220, 220)
+
+    p.draw.rect(surf, bg, rect, border_radius=5)
+    p.draw.rect(surf, (80, 80, 80), rect, 1, border_radius=5)
+
+    # Подпись
+    if "label" in info:
+        r, g, b = bg
+        tc = (255,255,255) if (r*0.299 + g*0.587 + b*0.114) < 100 else (20, 20, 20)
+        txt = font.render(info["label"], True, tc)
+        surf.blit(txt, (rect.centerx - txt.get_width()//2,
+                        rect.centery - txt.get_height()//2))
+
+    # Рамка для активного цвета
+    if is_color_btn and info["color"] == active_color:
+        p.draw.rect(surf, (255, 255, 0), rect.inflate(4, 4), 3, border_radius=6)
+
+
+# --- Главный цикл ---
 running = True
 while running:
     mx, my = p.mouse.get_pos()
-    cx, cy = mx - canvas_offset[0], my - canvas_offset[1]
-    
+    cw, ch = canvas.get_size()
+    cx = mx - canvas_offset[0]
+    cy = my - canvas_offset[1]
+
     for event in p.event.get():
         if event.type == p.QUIT:
             running = False
 
         if event.type == p.KEYDOWN:
-            # 3.2 Brush Size Shortcuts
             if event.key == p.K_1: brush_size = 2
             if event.key == p.K_2: brush_size = 5
             if event.key == p.K_3: brush_size = 10
-            
-            # 3.4 Save Canvas (Ctrl+S)
             if event.key == p.K_s and (p.key.get_mods() & p.KMOD_CTRL):
                 fname = f"paint_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 p.image.save(canvas, fname)
-                print(f"Canvas saved as {fname}")
+                print(f"Saved: {fname}")
 
-            # 3.5 Text Tool Logic
             if tool == "text" and text_pos:
                 if event.key == p.K_RETURN:
                     txt_surf = large_font.render(text_input, True, color)
@@ -134,13 +181,21 @@ while running:
                     clicked_ui = True
                     if "color" in info:
                         color = info["color"]
-                        if name == "eraser": tool = "draw"
-                    elif name == "plus": brush_size = min(50, brush_size + 1)
-                    elif name == "minus": brush_size = max(1, brush_size - 1)
-                    elif name == "clear": canvas.fill((255, 255, 255))
-                    else: tool = name
-            
-            if not clicked_ui and 0 <= cx < 800 and 0 <= cy < 600:
+                        if name != "eraser":
+                            tool = "draw"  # возвращаем карандаш при выборе цвета
+                    elif name == "eraser":
+                        color = (255, 255, 255)
+                        tool = "draw"
+                    elif name == "plus":
+                        brush_size = min(50, brush_size + 1)
+                    elif name == "minus":
+                        brush_size = max(1, brush_size - 1)
+                    elif name == "clear":
+                        canvas.fill((255, 255, 255))
+                    else:
+                        tool = name
+
+            if not clicked_ui and 0 <= cx < cw and 0 <= cy < ch:
                 if tool == "fill":
                     flood_fill(canvas, cx, cy, color)
                 elif tool == "text":
@@ -153,76 +208,77 @@ while running:
 
         if event.type == p.MOUSEBUTTONUP:
             if drawing:
-                # Commit shapes to canvas
                 if tool == "line":
                     p.draw.line(canvas, color, start_pos, (cx, cy), brush_size)
                 elif tool == "circle":
                     rad = int(math.hypot(cx - start_pos[0], cy - start_pos[1]))
-                    p.draw.circle(canvas, color, start_pos, rad, brush_size)
+                    if rad > 0:
+                        p.draw.circle(canvas, color, start_pos, rad, brush_size)
                 elif tool == "square":
                     side = max(abs(cx - start_pos[0]), abs(cy - start_pos[1]))
-                    rect = p.Rect(start_pos[0], start_pos[1], side, side)
-                    p.draw.rect(canvas, color, rect, brush_size)
-                elif tool != "draw":
+                    p.draw.rect(canvas, color, p.Rect(start_pos[0], start_pos[1], side, side), brush_size)
+                elif tool not in ("draw",):
                     pts = get_shape_points(tool, start_pos, (cx, cy))
-                    if len(pts) > 2: p.draw.polygon(canvas, color, pts, brush_size)
-                
+                    if len(pts) > 2:
+                        p.draw.polygon(canvas, color, pts, brush_size)
                 drawing = False
                 start_pos = None
 
-    # 3.1 Freehand (Pencil) Tool
+    # Рисование карандашом
     if drawing and tool == "draw":
-        if 0 <= cx < 800 and 0 <= cy < 600:
+        if 0 <= cx < cw and 0 <= cy < ch:
             p.draw.line(canvas, color, last_draw_pos, (cx, cy), brush_size)
-            # Circle interpolation for smooth lines
             p.draw.circle(canvas, color, (cx, cy), brush_size // 2)
             last_draw_pos = (cx, cy)
 
-    # --- DRAWING EVERYTHING ---
-    screen.fill((230, 230, 230))
-    
-    # UI Buttons
+    # --- Отрисовка ---
+    screen.fill((200, 200, 200))
+
+    # Кнопки
     for name, info in btns.items():
-        bg = info.get("color", (255, 255, 255))
-        if tool == name: bg = (255, 255, 0) # Highlight active
-        
-        p.draw.rect(screen, bg, info["rect"])
-        p.draw.rect(screen, (0, 0, 0), info["rect"], 2)
-        
-        if "label" in info:
-            txt = font.render(info["label"], True, (0,0,0))
-            screen.blit(txt, (info["rect"].centerx - txt.get_width()//2, 
-                             info["rect"].centery - txt.get_height()//2))
+        draw_button(screen, name, info, tool, color)
 
-    # UI Status Info
-    screen.blit(large_font.render(f"Width: {brush_size}", True, (0,0,0)), (840, 65))
-    p.draw.rect(screen, color, (940, 60, 40, 40))
-    p.draw.rect(screen, (0,0,0), (940, 60, 40, 40), 2)
+    # Инфо: размер кисти и текущий цвет
+    info_x = btns["plus"]["rect"].right + 15
+    size_txt = large_font.render(f"Size: {brush_size}", True, (30, 30, 30))
+    screen.blit(size_txt, (info_x, 63))
 
-    # Canvas Rendering
+    # Текущий цвет — квадрат справа
+    color_rect = p.Rect(WIDTH - 55, 58, 42, 38)
+    p.draw.rect(screen, color, color_rect, border_radius=5)
+    p.draw.rect(screen, (60, 60, 60), color_rect, 1, border_radius=5)
+
+    # Разделительная линия
+    p.draw.line(screen, (150, 150, 150), (0, 104), (WIDTH, 104), 1)
+
+    # Холст
     screen.blit(canvas, canvas_offset)
-    p.draw.rect(screen, (0,0,0), (canvas_offset[0], canvas_offset[1], 800, 600), 2)
+    p.draw.rect(screen, (60, 60, 60),
+                (canvas_offset[0]-1, canvas_offset[1]-1, cw+2, ch+2), 1)
 
-    # --- LIVE PREVIEWS ---
+    # Превью фигур при рисовании
     if drawing and start_pos and tool != "draw":
-        ps = (start_pos[0] + canvas_offset[0], start_pos[1] + canvas_offset[1])
+        ox, oy = canvas_offset
+        ps = (start_pos[0] + ox, start_pos[1] + oy)
         if tool == "line":
             p.draw.line(screen, color, ps, (mx, my), brush_size)
         elif tool == "circle":
             rad = int(math.hypot(mx - ps[0], my - ps[1]))
-            p.draw.circle(screen, color, ps, rad, 1)
+            if rad > 0:
+                p.draw.circle(screen, color, ps, rad, 1)
         elif tool == "square":
             side = max(abs(mx - ps[0]), abs(my - ps[1]))
             p.draw.rect(screen, color, (ps[0], ps[1], side, side), 1)
         else:
             pts = get_shape_points(tool, ps, (mx, my))
-            if len(pts) > 2: p.draw.polygon(screen, color, pts, 1)
+            if len(pts) > 2:
+                p.draw.polygon(screen, color, pts, 1)
 
-    # Text Tool Live Typing
+    # Превью текста
     if tool == "text" and text_pos:
-        cursor_txt = text_input + "|"
-        txt_prev = large_font.render(cursor_txt, True, color)
-        screen.blit(txt_prev, (text_pos[0] + canvas_offset[0], text_pos[1] + canvas_offset[1]))
+        preview = large_font.render(text_input + "|", True, color)
+        screen.blit(preview, (text_pos[0] + canvas_offset[0],
+                               text_pos[1] + canvas_offset[1]))
 
     p.display.flip()
     clock.tick(120)
